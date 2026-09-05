@@ -292,6 +292,15 @@ class MainWindow:
                                          command=self._import_cookie)
         self._cookie_btn.pack(side="left", padx=(0, 6))
 
+        self._login_btn = ctk.CTkButton(row2, text="登录抖音（自动抓 Cookie）",
+                                        width=150, height=30, corner_radius=8,
+                                        font=(FONT_FAMILY, 11),
+                                        fg_color=self._pal["accent"],
+                                        hover_color=self._pal["accent2"],
+                                        text_color="#ffffff",
+                                        command=self._login_douyin)
+        self._login_btn.pack(side="left", padx=(0, 6))
+
         self._proxy_btn = ctk.CTkButton(row2, text=self._proxy_label_text(),
                                         width=118, height=30, corner_radius=8,
                                         font=(FONT_FAMILY, 11),
@@ -1178,6 +1187,37 @@ class MainWindow:
             self.settings["cookies_file"] = path
             save_settings(self.settings_path, self.settings)
             self._set_status("Cookie 已导入")
+
+    def _login_douyin(self):
+        """弹出浏览器窗口让用户登录抖音，自动抓取登录 Cookie 并接入提取链"""
+        if getattr(self, "_logging_in", False):
+            return
+        self._logging_in = True
+        self._login_btn.configure(text="登录中…（弹出窗口）",
+                                  state="disabled")
+        self._set_status("请在弹出的浏览器窗口中扫码/登录抖音（最长等 90 秒）")
+
+        def worker():
+            from core.cookie_helper import fetch_douyin_cookies_interactive
+            res = fetch_douyin_cookies_interactive(
+                progress_cb=lambda m: self.root.after(
+                    0, self._set_status, str(m)))
+            self.root.after(0, self._on_login_done, res)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_login_done(self, res: dict):
+        self._logging_in = False
+        self._login_btn.configure(text="登录抖音（自动抓 Cookie）",
+                                  state="normal")
+        if res.get("success") and res.get("file"):
+            self._cookies_file = res["file"]
+            self.extractor._cookies_file = res["file"]
+            self._cookie_btn.configure(text="Cookie 已导入")
+            self.settings["cookies_file"] = res["file"]
+            save_settings(self.settings_path, self.settings)
+        self._set_status(res.get("message", "完成"))
+        messagebox.showinfo("抖音登录 Cookie", res.get("message", "完成"))
 
     def _auto_get_cookie(self):
         self._set_status("正在从浏览器获取 Cookie...")

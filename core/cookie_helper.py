@@ -135,6 +135,122 @@ def fetch_douyin_cookies(output_file: Optional[str] = None) -> Optional[str]:
     )
 
 
+# 登录态 Cookie 名（任一存在即认为已登录）
+LOGIN_COOKIE_NAMES = ("sessionid_ss", "sessionid", "sid_tt", "sid_guard",
+                      "passport_auth_token")
+
+
+def has_login_cookie(cookies: list) -> bool:
+    """判断 cookie 列表中是否包含抖音登录态"""
+    names = {c.get("name") for c in cookies or []}
+    return bool(names & set(LOGIN_COOKIE_NAMES))
+
+
+def fetch_douyin_cookies_interactive(
+    output_file: Optional[str] = None,
+    wait_seconds: int = 90,
+    channel: Optional[str] = "chromium",
+    progress_cb=None,
+) -> dict:
+    """交互式获取抖音登录 Cookie：
+
+    弹出真浏览器窗口打开抖音首页，用户扫码/登录。每 1.5 秒检测登录态
+    （sessionid_ss / sessionid / sid_tt / sid_guard），检测到即收集 Cookie
+    结束；等待 wait_seconds 秒超时则收集基础 Cookie（继续可用，但私密
+    视频可能仍受限）。
+
+    Args:
+        output_file: Netscape 保存路径
+        wait_seconds: 最长等待登录秒数
+        channel: 浏览器通道 chromium/msedge
+        progress_cb: 回调 (msg: str)
+
+    Returns:
+        {"success": bool, "logged_in": bool, "file": str, "message": str}
+    """
+    import time as _time
+    from core.douyin_extractor import DOUYIN_UA, _STEALTH_JS
+
+    if output_file is None:
+        output_file = os.path.join(
+            os.path.expanduser("~"), ".video_crawler",
+            "douyin_cookies.txt")
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    if progress_cb:
+        progress_cb("启动浏览器窗口（请扫码登录抖音）...")
+
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-first-run", "--no-sandbox", "--lang=zh-CN",
+            ]
+            launch_kwargs = {"headless": False, "args": args}
+            if channel:
+                launch_kwargs["channel"] = channel
+            browser = p.chromium.launch(**launch_kwargs)
+            context = browser.new_context(
+                user_agent=DOUYIN_UA,
+                viewport={"width": 1280, "height": 900},
+                locale="zh-CN", timezone_id="Asia/Shanghai",
+            )
+            context.add_init_script(_STEALTH_JS)
+            page = context.new_page()
+            page.goto("https://www.douyin.com/", wait_until="domcontentloaded",
+                      timeout=40000)
+            page.wait_for_timeout(3000)
+
+            logged_in = False
+            deadline = _time.time() + wait_seconds
+            while _time.time() < deadline:
+                # 每 1.5s 检测登录态
+                try:
+                    cookies = [dict(c) for c in context.cookies()
+                               if "douyin" in c.get("domain", "")]
+                    if has_login_cookie(cookies):
+                        logged_in = True
+                        break
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    # 页面意外关闭（用户手动关窗/竞态）则停止等待
+                    break
+
+            cookies = [dict(c) for c in context.cookies()
+                       if "douyin" in c.get("domain", "")]
+            browser.close()
+
+        if not cookies:
+            if progress_cb:
+                progress_cb("未获取到任何 Cookie")
+            return {"success": False, "logged_in": False,
+                    "file": "", "message": "未获取到 Cookie"}
+
+        ok = save_cookies_netscape(cookies, "douyin", output_file)
+        if not ok:
+            ok = save_cookies_netscape(cookies, "", output_file)
+        if not ok:
+            return {"success": False, "logged_in": logged_in,
+                    "file": "", "message": "Cookie 保存失败"}
+        if logged_in:
+            msg = "登录态获取成功，已保存登录 Cookie"
+        else:
+            msg = (f"未检测到登录（{wait_seconds}s 超时），"
+                   "已保存基础 Cookie（私密视频可能仍需要登录）")
+        if progress_cb:
+            progress_cb(msg)
+        return {"success": True, "logged_in": logged_in,
+                "file": output_file, "message": msg}
+
+    except Exception as e:
+        if progress_cb:
+            progress_cb(f"失败: {e}")
+        return {"success": False, "logged_in": False,
+                "file": "", "message": f"浏览器失败: {e}"}
+
+
 def fetch_tiktok_cookies(output_file: Optional[str] = None) -> Optional[str]:
     """获取 TikTok Cookie"""
     return fetch_cookies_with_playwright(

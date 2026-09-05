@@ -14,6 +14,7 @@
 """
 
 import argparse
+import os
 import sys
 import threading
 import time
@@ -82,6 +83,9 @@ def main():
     ap.add_argument("--login-cookie", default=None,
                     help="Netscape 格式 Cookie 文件（导出 douyin.com 的"
                          "登录 Cookie，成功率最高）")
+    ap.add_argument("--auto-login", action="store_true",
+                    help="自动登录：弹出浏览器窗口扫码登录抖音，自动抓取登录 "
+                         "Cookie 后再提取（私密/粉丝可见视频必备）")
     ap.add_argument("--cdp", default=None,
                     help="连接已打开的浏览器远程调试端口，"
                          "如 http://127.0.0.1:9222（用真实登录态）")
@@ -114,13 +118,24 @@ def main():
         def cb(msg):
             print(f"       {msg}")
 
+        login_cookie_file = args.login_cookie
+        if args.auto_login and not login_cookie_file:
+            from core.cookie_helper import fetch_douyin_cookies_interactive
+            print("[0/3] 请在弹出的浏览器窗口中登录抖音（最长等 90 秒）...")
+            res = fetch_douyin_cookies_interactive(
+                progress_cb=lambda m: print(f"       {m}"))
+            if res.get("file"):
+                login_cookie_file = res["file"]
+                print("      登录 Cookie 已保存:",
+                      os.path.basename(res["file"]))
+
         result = extract_douyin_video(
             args.url,
             timeout=args.timeout * 1000,
             headless=args.headless,
             channel=args.channel,
             proxy=args.proxy,
-            login_cookie_file=args.login_cookie,
+            login_cookie_file=login_cookie_file,
             cdp_url=args.cdp,
             progress_cb=cb,
         )
