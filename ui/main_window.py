@@ -104,6 +104,17 @@ class MainWindow:
         self._build_layout()
         self._bind_events()
 
+        # 静默 CustomTkinter 销毁含 CTkButton 树时已知的 focus TclError 噪音
+        # （主题切换会重建界面，销毁时挂起的 focus 回调指向已销毁 canvas）
+        def _report(exc, val, tb):
+            msg = str(val)
+            if "invalid command name" in msg and "ctkcanvas" in msg:
+                return
+            import traceback
+            traceback.print_exception(exc, val, tb)
+
+        self.root.report_callback_exception = _report
+
         # 轮询
         self._poll_downloads()
         self._poll_progress_queue()
@@ -157,6 +168,7 @@ class MainWindow:
 
         outer = ctk.CTkFrame(self.root, fg_color="transparent")
         outer.pack(fill="both", expand=True, padx=18, pady=(14, 8))
+        self._content = outer
 
         self._build_header(outer)
         self._build_input_card(outer)
@@ -454,6 +466,53 @@ class MainWindow:
         ctk.set_appearance_mode(mode)
         self.settings["appearance"] = mode
         save_settings(self.settings_path, self.settings)
+        # 自定义配色是硬编码的，设置外观模式不会自动更新控件颜色，
+        # 因此重建整个界面以应用新调色板。
+        self._rebuild_ui()
+
+    def _rebuild_ui(self):
+        """按新的 appearance 重建界面，并保留已提取的数据与输入内容"""
+        keep_url = ""
+        keep_dir = ""
+        if hasattr(self, "_url_entry"):
+            try:
+                keep_url = self._url_entry.get()
+                keep_dir = self._dir_entry.get()
+            except Exception:
+                pass
+        try:
+            # 先移走焦点并刷新空闲事件，避免销毁含 CTkButton 的树时
+            # 挂起的 focus 回调指向已销毁的 canvas 而报 TclError
+            self.root.focus_set()
+            self.root.update_idletasks()
+        except Exception:
+            pass
+        try:
+            if self._content.winfo_exists():
+                self._content.destroy()
+                self.root.update_idletasks()
+        except Exception:
+            pass
+        self._queue_rows.clear()
+        self._build_layout()
+        if keep_url:
+            try:
+                self._url_entry.insert(0, keep_url)
+            except Exception:
+                pass
+        if keep_dir:
+            try:
+                self._dir_entry.delete(0, "end")
+                self._dir_entry.insert(0, keep_dir)
+            except Exception:
+                pass
+        if self._video_items:
+            self._list_count_label.configure(
+                text=f"共 {len(self._video_items)} 项")
+            self._refresh_video_list()
+            self._show_detail(min(self._selected_indices) if
+                              self._selected_indices else 0)
+        self._refresh_queue_display()
 
     def _on_mode_change(self, value: str):
         self._search_mode = (value == "关键词搜索")
