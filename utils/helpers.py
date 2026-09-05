@@ -8,6 +8,16 @@ from pathlib import Path
 from typing import Optional
 
 
+def default_download_dir() -> str:
+    """跨平台默认下载目录：~/Downloads/VideoCrawler（保持旧 Windows 路径兼容）"""
+    d = Path.home() / "Downloads" / "VideoCrawler"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return str(d)
+
+
 def fix_console_encoding() -> None:
     """让控制台打印不因 GBK 编码崩溃（Windows cmd 默认 GBK + 含 emoji/• 的文本）。
 
@@ -75,12 +85,14 @@ def sanitize_filename(name: str) -> str:
 def load_settings(path: str) -> dict:
     """加载设置"""
     default = {
-        "download_dir": "D:/pachong/video_crawler/downloads",
+        "download_dir": default_download_dir(),
         "max_concurrent": 3,
         "proxy": "",
         "cookies_file": "",
         "default_quality": "bestvideo+bestaudio/best",
         "window_geometry": "1200x800",
+        "appearance": "Dark",
+        "image_format": "jpg",
     }
     try:
         if Path(path).exists():

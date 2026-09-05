@@ -68,6 +68,23 @@ python -m playwright install chromium
 
 要求 Python 3.10+。
 
+### macOS / Linux 支持
+
+项目为跨平台 Python 项目，**macOS / Linux 可直接源码运行**（Release 中的 `.exe`
+仅适用于 Windows）：
+
+```bash
+# macOS:   brew install python ffmpeg
+# Linux:   sudo apt install python3 python3-tk ffmpeg
+pip3 install -r requirements.txt
+python3 -m playwright install chromium
+python3 main.py          # 图形界面
+python3 cli.py "https://v.douyin.com/xxxxxx/"   # 命令行
+```
+
+macOS 下 GUI 自动使用苹方字体（PingFang SC），默认下载目录为
+`~/Downloads/VideoCrawler`（Windows 保持原逻辑）。
+
 ## 快速开始
 
 ### 图形界面（推荐）

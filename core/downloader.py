@@ -431,12 +431,14 @@ class DownloadManager:
         print("[清理] 正在停止所有下载...")
         self.cancel_all()
 
-        # 杀掉 aria2c 进程
-        try:
-            subprocess.run(["taskkill", "/f", "/im", "aria2c.exe"],
-                           capture_output=True, timeout=5)
-        except Exception:
-            pass
+        # Windows 杀 aria2c 进程（仅 Windows）
+        import sys as _sys
+        if _sys.platform.startswith("win"):
+            try:
+                subprocess.run(["taskkill", "/f", "/im", "aria2c.exe"],
+                               capture_output=True, timeout=5)
+            except Exception:
+                pass
 
         # 删除 .part 残留
         output_dir = os.path.dirname(self._queue[0].output_dir) if self._queue else None

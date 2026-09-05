@@ -6,6 +6,7 @@
 
 import os
 import re
+import sys
 import queue
 import threading
 import concurrent.futures
@@ -22,7 +23,7 @@ from core.extractor import VideoExtractor
 from core.downloader import DownloadManager, DownloadTask
 from utils.helpers import (
     format_size, format_speed, format_duration, format_eta,
-    load_settings, save_settings, is_url,
+    load_settings, save_settings, is_url, default_download_dir,
 )
 
 # ── 设计令牌 ──────────────────────────────────────────────────
@@ -53,7 +54,9 @@ LIGHT = {
     "danger": "#dc2626",
 }
 
-FONT_FAMILY = "Microsoft YaHei UI"
+FONT_FAMILY = ("Microsoft YaHei UI" if sys.platform == "win32"
+               else "PingFang SC" if sys.platform == "darwin"
+               else "Noto Sans CJK SC")
 
 
 def _palette(appearance: str) -> dict:
@@ -134,8 +137,7 @@ class MainWindow:
         s.setdefault("appearance", "Dark")
         s.setdefault("max_concurrent", 3)
         s.setdefault("image_format", "jpg")
-        s.setdefault("download_dir", str(Path(__file__).resolve().parent.parent /
-                                         "downloads"))
+        s.setdefault("download_dir", default_download_dir())
 
     # ── 菜单 ──────────────────────────────────────────────────
     def _build_menu(self):
@@ -259,11 +261,11 @@ class MainWindow:
         self._dir_entry = ctk.CTkEntry(
             row2, width=330, height=30, corner_radius=8,
             font=(FONT_FAMILY, 11),
-            placeholder_text="D:/pachong/video_crawler/downloads",
+            placeholder_text=default_download_dir(),
             fg_color=self._pal["card2"], border_color=self._pal["border"],
             text_color=self._pal["text"])
         self._dir_entry.insert(0, self.settings.get(
-            "download_dir", "D:/pachong/video_crawler/downloads"))
+            "download_dir", default_download_dir()))
         self._dir_entry.pack(side="left", padx=(0, 6))
 
         ctk.CTkButton(row2, text="浏览", width=52, height=30, corner_radius=8,
@@ -1170,11 +1172,17 @@ class MainWindow:
     def _open_download_dir(self):
         import subprocess
         path = self._dir_entry.get().strip()
-        if path:
-            try:
+        if not path:
+            return
+        try:
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            elif sys.platform.startswith("win"):
                 subprocess.Popen(["explorer", os.path.normpath(path)])
-            except Exception:
-                pass
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception:
+            pass
 
     def _import_cookie(self):
         path = filedialog.askopenfilename(
