@@ -63,6 +63,13 @@ def _palette(appearance: str) -> dict:
 class MainWindow:
     """主窗口"""
 
+    _IMG_FMT_MAP = {
+        "JPG（推荐）": "jpg",
+        "PNG": "png",
+        "WEBP": "webp",
+        "保持源格式": "keep",
+    }
+
     def __init__(self, root: ctk.CTk):
         self.root = root
         self.root.title("视频爬虫 · Modern")
@@ -344,12 +351,13 @@ class MainWindow:
             font=(FONT_FAMILY, 12), text_color=self._pal["sub"])
         self._empty_label.pack(pady=60)
 
-        # 右：详情
-        right = ctk.CTkFrame(main, width=380, fg_color=self._pal["card"],
-                             corner_radius=14, border_width=1,
-                             border_color=self._pal["border"])
+        # 右：详情（可滚动，防止小窗口时按钮被截断）
+        right = ctk.CTkScrollableFrame(
+            main, width=380, fg_color=self._pal["card"],
+            corner_radius=14, border_width=1,
+            border_color=self._pal["border"])
         right.pack(side="right", fill="both")
-        right.pack_propagate(False)
+        self._detail_panel = right
         self._build_detail_panel(right)
 
     def _build_detail_panel(self, parent):
@@ -360,7 +368,7 @@ class MainWindow:
 
         # 封面
         self._cover_label = ctk.CTkLabel(parent, text="未选择作品预览",
-                                         width=348, height=176,
+                                         width=348, height=150,
                                          corner_radius=10,
                                          fg_color=self._pal["card2"],
                                          text_color=self._pal["sub"],
@@ -401,6 +409,27 @@ class MainWindow:
         self._quality_menu.set(label_for_cur)
         self._quality_menu.pack(fill="x", padx=pad, pady=(2, 12))
 
+        # 图集图片格式（用户可设置转换格式，即时生效并持久化）
+        ctk.CTkLabel(parent, text="图集图片格式",
+                     font=(FONT_FAMILY, 11),
+                     text_color=self._pal["sub"]).pack(anchor="w", padx=pad)
+        self._img_fmt_menu = ctk.CTkOptionMenu(
+            parent, values=list(self._IMG_FMT_MAP.keys()),
+            height=34, corner_radius=9, font=(FONT_FAMILY, 12),
+            fg_color=self._pal["card2"], button_color=self._pal["accent"],
+            button_hover_color=self._pal["accent2"],
+            text_color=self._pal["text"],
+            command=lambda _v: self._on_img_fmt_change(),
+            dropdown_fg_color=self._pal["card2"],
+            dropdown_hover_color=self._pal["border"],
+            dropdown_text_color=self._pal["text"])
+        cur_fmt_key = next(
+            (k for k, v in self._IMG_FMT_MAP.items()
+             if v == self.settings.get("image_format", "jpg")),
+            "JPG（推荐）")
+        self._img_fmt_menu.set(cur_fmt_key)
+        self._img_fmt_menu.pack(fill="x", padx=pad, pady=(2, 12))
+
         # 按钮
         btn_row = ctk.CTkFrame(parent, fg_color="transparent")
         btn_row.pack(fill="x", padx=pad)
@@ -420,10 +449,10 @@ class MainWindow:
 
         # 附加信息
         self._detail_extra = ctk.CTkTextbox(
-            parent, height=110, fg_color=self._pal["card2"],
+            parent, height=90, fg_color=self._pal["card2"],
             text_color=self._pal["sub"], font=(FONT_FAMILY, 10),
             corner_radius=10, wrap="word")
-        self._detail_extra.pack(fill="both", expand=True, padx=pad,
+        self._detail_extra.pack(fill="x", padx=pad,
                                 pady=(12, 14))
         self._detail_extra.configure(state="disabled")
 
@@ -922,10 +951,9 @@ class MainWindow:
                 img = Image.open(io.BytesIO(resp.content)).convert("RGB")
                 img.thumbnail((640, 340))
                 photo = ctk.CTkImage(light_image=img, dark_image=img,
-                                     size=(320, int(320 * img.height /
-                                                    img.width)))
+                                     size=(348, 150))
                 self.root.after(0, lambda: safe_apply(
-                    image=photo, text="", width=348, height=196))
+                    image=photo, text="", width=348, height=150))
             except Exception:
                 self.root.after(0, lambda: safe_apply(
                     text="封面加载失败", image=None))
@@ -939,6 +967,12 @@ class MainWindow:
                 self._current_quality = code
                 break
 
+    def _on_img_fmt_change(self):
+        fmt = self._IMG_FMT_MAP.get(self._img_fmt_menu.get(), "jpg")
+        self.settings["image_format"] = fmt
+        save_settings(self.settings_path, self.settings)
+        self._set_status(f"图集图片格式: {self._img_fmt_menu.get()}")
+
     # ── 下载 ──────────────────────────────────────────────────
     def _get_selected_videos(self) -> list:
         return [self._video_items[i] for i in sorted(self._selected_indices)
@@ -949,13 +983,33 @@ class MainWindow:
         if not items:
             messagebox.showwarning("提示", "请先勾选要下载的作品")
             return
-        self._start_downloads(items)
+        self._confirm_and_download(items)
 
     def _download_all(self):
         if not self._video_items:
             messagebox.showwarning("提示", "没有可下载的作品")
             return
-        self._start_downloads(self._video_items)
+        self._confirm_and_download(self._video_items)
+
+    def _confirm_and_download(self, items: list):
+        """下载前确认：显示数量/目录/图集格式"""
+        output_dir = self._dir_entry.get().strip() or "(未设置)"
+        fmt_label = self._img_fmt_menu.get() if hasattr(
+            self, "_img_fmt_menu") else "JPG（推荐）"
+        n_img = sum(1 for vi in items
+                    if (vi.get("_douyin_images") or vi.get("images"))
+                    and not (vi.get("urls") or vi.get("all_urls")))
+        desc = f"将下载 {len(items)} 个作品"
+        if n_img:
+            desc += f"（其中图集 {n_img} 个）"
+        if not messagebox.askyesno(
+                "确认下载",
+                f"{desc}\n\n"
+                f"保存目录: {output_dir}\n"
+                f"图集图片格式: {fmt_label}\n\n"
+                "确认开始下载？"):
+            return
+        self._start_downloads(items)
 
     def _start_downloads(self, items: list):
         output_dir = self._dir_entry.get().strip()
