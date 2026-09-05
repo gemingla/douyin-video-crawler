@@ -742,7 +742,11 @@ class MainWindow:
     def _load_thumb_async(self, url: str, label: ctk.CTkLabel, size: tuple):
         if not url or url in self._thumb_cache:
             if url in self._thumb_cache:
-                label.configure(image=self._thumb_cache[url], text="")
+                try:
+                    if label.winfo_exists():
+                        label.configure(image=self._thumb_cache[url], text="")
+                except Exception:
+                    pass
             return
 
         def fetch():
@@ -755,8 +759,14 @@ class MainWindow:
                 photo = ctk.CTkImage(light_image=img, dark_image=img,
                                      size=size)
                 self._thumb_cache[url] = photo
-                self.root.after(0, lambda: (
-                    label.configure(image=photo, text="")))
+
+                def apply():
+                    try:
+                        if label.winfo_exists():
+                            label.configure(image=photo, text="")
+                    except Exception:
+                        pass
+                self.root.after(0, apply)
             except Exception:
                 pass
 
@@ -834,8 +844,15 @@ class MainWindow:
 
     def _load_cover(self, url: str):
         def fetch():
+            def safe_apply(**kw):
+                try:
+                    if self._cover_label.winfo_exists():
+                        self._cover_label.configure(**kw)
+                except Exception:
+                    pass
+
             if not url:
-                self.root.after(0, lambda: self._cover_label.configure(
+                self.root.after(0, lambda: safe_apply(
                     text="暂无封面预览", image=None))
                 return
             try:
@@ -847,10 +864,10 @@ class MainWindow:
                 photo = ctk.CTkImage(light_image=img, dark_image=img,
                                      size=(320, int(320 * img.height /
                                                     img.width)))
-                self.root.after(0, lambda: self._cover_label.configure(
+                self.root.after(0, lambda: safe_apply(
                     image=photo, text="", width=348, height=196))
             except Exception:
-                self.root.after(0, lambda: self._cover_label.configure(
+                self.root.after(0, lambda: safe_apply(
                     text="封面加载失败", image=None))
 
         threading.Thread(target=fetch, daemon=True).start()
@@ -895,34 +912,60 @@ class MainWindow:
         self._update_stats()
 
     def _refresh_queue_display(self):
-        for w in self._queue_frame.winfo_children():
-            if w is not self._empty_queue_label:
-                w.destroy()
+        """增量刷新下载队列：只新建/更新需要的行，避免全部销毁造成闪烁与 TclError"""
         count = self.download_manager.total_count
         self._queue_count_label.configure(text=f"共 {count} 个任务")
+
+        tasks = (self.download_manager._active +
+                 self.download_manager._queue +
+                 self.download_manager._completed[-4:])[-6:]
+        visible_ids = [t.task_id for t in tasks]
+
+        # 移除已不在展示范围的旧行
+        for tid in list(self._queue_rows.keys()):
+            if tid not in visible_ids:
+                w = self._queue_rows.pop(tid)[0]
+                try:
+                    if w.winfo_exists():
+                        w.destroy()
+                except Exception:
+                    pass
+
         if count == 0:
+            if self._queue_rows:
+                for frame, *_ in self._queue_rows.values():
+                    try:
+                        if frame.winfo_exists():
+                            frame.destroy()
+                    except Exception:
+                        pass
+                self._queue_rows.clear()
             self._empty_queue_label.pack(pady=6)
             return
         if self._empty_queue_label.winfo_manager():
             self._empty_queue_label.pack_forget()
 
-        tasks = (self.download_manager._active +
-                 self.download_manager._queue +
-                 self.download_manager._completed[-4:])
-        for task in tasks[-6:]:
+        for task in tasks:
             self._create_task_row(task)
 
     def _create_task_row(self, task: DownloadTask):
         row = self._queue_rows.get(task.task_id)
-        if row:
+        if row is not None:
             frame, pb, pct, info = row
+            # 行可能已被销毁（防御）
+            try:
+                if not frame.winfo_exists():
+                    row = None
+            except Exception:
+                row = None
+        if row is not None:
+            frame, pb, pct, info = row
+            pb.set(task.progress / 100)
             if task.status == "downloading":
-                pb.set(task.progress / 100)
                 pct.configure(text=f"{task.progress:.0f}%")
                 info.configure(text=(f"{format_speed(task.speed)} · "
                                      f"剩余 {format_eta(task.eta)}"))
             elif task.status == "completed":
-                pb.set(1.0)
                 pct.configure(text="100%")
                 info.configure(text="完成", text_color=self._pal["success"])
             elif task.status == "failed":
