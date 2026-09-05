@@ -27,5 +27,10 @@ ui_shot*.png
 .DS_Store
 Thumbs.db
 
+# 打包产物
+dist/
+build/
+*.spec
+
 # 本地设置
 *.settings.json

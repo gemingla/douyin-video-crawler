@@ -12,8 +12,17 @@ def fix_console_encoding() -> None:
     """让控制台打印不因 GBK 编码崩溃（Windows cmd 默认 GBK + 含 emoji/• 的文本）。
 
     保留原编码（中文照常显示），仅将无法编码的字符替换为 '?'。
+    无控制台窗口（PyInstaller --windowed/gui）时 stdout 为 None，重定向到
+    内存流避免 print 抛异常。
     """
-    for stream in (sys.stdout, sys.stderr):
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            try:
+                setattr(sys, stream_name, __import__("io").StringIO())
+            except Exception:
+                pass
+            continue
         try:
             if hasattr(stream, "reconfigure"):
                 stream.reconfigure(errors="replace")

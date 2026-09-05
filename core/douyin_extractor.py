@@ -709,7 +709,9 @@ def extract_douyin_video(
         "3. 或连接已登录浏览器: 关闭浏览器后以\n"
         "   msedge --remote-debugging-port=9222 启动，再\n"
         "   python cli.py <链接> --cdp http://127.0.0.1:9222\n"
-        "4. 若网络出口在境外, 抖音可能限制视频页; 可加 --proxy 使用国内代理"
+        "4. 若网络出口在境外, 抖音可能限制视频页; 可加 --proxy 使用国内代理\n"
+        "5. 若提示浏览器内核缺失（Windows 版）: 从 Release 下载\n"
+        "   chromium-win64.zip，解压到 %LOCALAPPDATA%\\ms-playwright"
     )
     return base
 

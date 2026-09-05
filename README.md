@@ -39,6 +39,24 @@
 
 ## 安装
 
+### 方式一：Release 快速下载（无需安装 Python，推荐）
+
+从本仓库 [Releases](https://github.com/gemingla/douyin-video-crawler/releases) 下载：
+
+| 文件 | 说明 |
+|---|---|
+| `VideoCrawler-win64.zip` | Windows 64 位 GUI 程序，解压后双击 `VideoCrawler.exe` 即用 |
+| `chromium-win64.zip` | 浏览器内核（首次使用必须）：解压到 `%LOCALAPPDATA%\ms-playwright` 目录下（目录结构保持 `chromium-1223/`、`ffmpeg-1011/`） |
+
+首次使用两步：
+1. 下载并解压 `chromium-win64.zip` 到 `%LOCALAPPDATA%\ms-playwright`（没有此目录就新建），
+   最终结果类似 `C:\Users\<你>\AppData\Local\ms-playwright\chromium-1223\chrome-win64\chrome.exe`
+2. 解压 `VideoCrawler-win64.zip`，双击 `VideoCrawler.exe` 打开图形界面
+
+> 单文件 exe 首次启动需要解压运行时（约 10~20 秒），请耐心等待。
+
+### 方式二：源码运行
+
 ```bash
 # 1. 安装依赖（国内镜像）
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
