@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# 下载产物（不提交任何下载的视频/图片）
+downloads/
+*.mp4
+*.webp
+*.part
+
+# 临时/调试文件
+_probe*.py
+_*.py
+*.log
+share_page.html
+router_data.json
+_target_detail.json
+ui_shot*.png
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 本地设置
+*.settings.json
