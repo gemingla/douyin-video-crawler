@@ -1217,7 +1217,13 @@ class MainWindow:
             self.settings["cookies_file"] = res["file"]
             save_settings(self.settings_path, self.settings)
         self._set_status(res.get("message", "完成"))
-        messagebox.showinfo("抖音登录 Cookie", res.get("message", "完成"))
+        msg = res.get("message", "完成")
+        if not res.get("success") and ("Executable" in msg or
+                                       "playwright" in msg.lower()):
+            msg += ("\n\n提示：请在 GitHub Releases 页下载 "
+                    "chromium-win64.zip 并解压到 "
+                    "%LOCALAPPDATA%\\ms-playwright")
+        messagebox.showinfo("抖音登录 Cookie", msg)
 
     def _auto_get_cookie(self):
         self._set_status("正在从浏览器获取 Cookie...")

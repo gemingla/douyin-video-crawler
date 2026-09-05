@@ -169,7 +169,8 @@ def fetch_douyin_cookies_interactive(
         {"success": bool, "logged_in": bool, "file": str, "message": str}
     """
     import time as _time
-    from core.douyin_extractor import DOUYIN_UA, _STEALTH_JS
+    from core.douyin_extractor import (
+        DOUYIN_UA, _STEALTH_JS, find_chromium_executable)
 
     if output_file is None:
         output_file = os.path.join(
@@ -189,7 +190,11 @@ def fetch_douyin_cookies_interactive(
                 "--no-first-run", "--no-sandbox", "--lang=zh-CN",
             ]
             launch_kwargs = {"headless": False, "args": args}
-            if channel:
+            exe = find_chromium_executable()
+            if exe:
+                # 打包环境修复：显式指向本机 Chromium
+                launch_kwargs["executable_path"] = exe
+            elif channel:
                 launch_kwargs["channel"] = channel
             browser = p.chromium.launch(**launch_kwargs)
             context = browser.new_context(

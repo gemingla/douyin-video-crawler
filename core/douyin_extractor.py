@@ -411,6 +411,50 @@ async (api) => {
 """
 
 
+def find_chromium_executable() -> Optional[str]:
+    """在常见位置探测 Chromium 可执行文件。
+
+    PyInstaller 打包后 playwright 会把 driver 包内空的 local-browsers
+    目录收进 bundle，导致 launch(channel=...) 在打包目录找浏览器而失败；
+    这里显式探测用户机器的 ms-playwright（或 PLAYWRIGHT_BROWSERS_PATH），
+    存在则用 executable_path 直连。
+
+    Returns:
+        chrome.exe 完整路径；找不到返回 None
+    """
+    candidates = []
+    env_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "")
+    roots = []
+    if env_path:
+        roots.append(env_path)
+    roots.append(os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                              "ms-playwright"))
+    roots.append(os.path.join(os.path.expanduser("~"),
+                              "AppData", "Local", "ms-playwright"))
+    for root in roots:
+        if not root or not os.path.isdir(root):
+            continue
+        for name in ("chromium", "chromium-", "chromium_headless_shell",
+                     "chromium_headless_shell-"):
+            try:
+                for d in os.listdir(root):
+                    if d == name or d.startswith(name):
+                        for sub in ("chrome-win64", "chrome-win",
+                                    "chrome-headless-shell-win64"):
+                            p = os.path.join(root, d, sub, "chrome.exe")
+                            if os.path.exists(p):
+                                candidates.append(p)
+                            p2 = os.path.join(root, d, sub,
+                                              "chrome-headless-shell.exe")
+                            if os.path.exists(p2):
+                                candidates.append(p2)
+            except Exception:
+                continue
+    # 优先完整版 chrome（channel=chromium 语义），其次 headless shell
+    ordered = sorted(candidates, key=lambda p: ("headless_shell" in p, p))
+    return ordered[0] if ordered else None
+
+
 def _launch_browser(p, headless: bool = True,
                     channel: Optional[str] = "chromium",
                     proxy: Optional[str] = None,
@@ -429,14 +473,20 @@ def _launch_browser(p, headless: bool = True,
         browser = p.chromium.connect_over_cdp(cdp_url)
         return browser, False
     launch_kwargs = {"headless": headless, "args": args}
-    if channel:
+    # 打包环境修复：显式指向本机 Chromium，避免 playwright 在
+    # bundle 内的空 local-browsers 目录找浏览器（channel 与
+    # executable_path 互斥，指定后不再传 channel）
+    exe = find_chromium_executable()
+    if exe:
+        launch_kwargs["executable_path"] = exe
+    elif channel:
         launch_kwargs["channel"] = channel
     if proxy:
         launch_kwargs["proxy"] = {"server": proxy}
     try:
         browser = p.chromium.launch(**launch_kwargs)
     except Exception:
-        if channel and channel != "chromium":
+        if channel and "executable_path" not in launch_kwargs:
             launch_kwargs.pop("channel", None)
             browser = p.chromium.launch(**launch_kwargs)
         else:
