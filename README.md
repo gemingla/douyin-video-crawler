@@ -100,6 +100,9 @@ python cli.py "https://v.douyin.com/xxxxxx/" --image-format png
 # 需要登录态时：导入 Cookie 或连接已登录浏览器
 python cli.py "https://v.douyin.com/xxxxxx/" --login-cookie cookies.txt
 python cli.py "https://v.douyin.com/xxxxxx/" --cdp http://127.0.0.1:9222
+
+# 一键自动登录：弹出浏览器扫码登录抖音，自动抓取登录 Cookie 后提取（推荐）
+python cli.py "https://v.douyin.com/xxxxxx/" --auto-login
 ```
 
 ## 界面效果
