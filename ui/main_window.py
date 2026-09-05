@@ -126,6 +126,7 @@ class MainWindow:
         s = self.settings
         s.setdefault("appearance", "Dark")
         s.setdefault("max_concurrent", 3)
+        s.setdefault("image_format", "jpg")
         s.setdefault("download_dir", str(Path(__file__).resolve().parent.parent /
                                          "downloads"))
 
@@ -965,7 +966,11 @@ class MainWindow:
         self.settings["download_dir"] = output_dir
 
         quality = self._current_quality
+        img_fmt = self.settings.get("image_format", "jpg")
         for vi in items:
+            # 图集按用户设置的图片格式转换保存
+            vi = dict(vi)
+            vi["_image_format"] = img_fmt
             self.download_manager.add_task(vi, quality, output_dir)
         self._set_status(f"已添加 {len(items)} 个下载任务")
         self._update_stats()
@@ -1212,7 +1217,7 @@ class MainWindow:
     def _show_settings_dialog(self):
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("首选项")
-        dialog.geometry("440x260")
+        dialog.geometry("460x340")
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -1243,7 +1248,24 @@ class MainWindow:
             width=240, height=32, corner_radius=8,
             fg_color=self._pal["card2"], button_color=self._pal["accent"],
             text_color=self._pal["text"])
-        quality_menu.pack(anchor="w", padx=20)
+        quality_menu.pack(anchor="w", padx=20, pady=(0, 12))
+
+        ctk.CTkLabel(dialog, text="图集图片格式（下载后自动转换）",
+                     font=(FONT_FAMILY, 12),
+                     text_color=self._pal["text"]).pack(anchor="w",
+                                                        padx=20, pady=(0, 2))
+        img_fmt_map = {"JPG（推荐）": "jpg", "PNG": "png",
+                       "WEBP（原格式）": "webp", "保持源格式": "keep"}
+        cur_fmt = self.settings.get("image_format", "jpg")
+        img_fmt_var = tk.StringVar(
+            value=next((k for k, v in img_fmt_map.items() if v == cur_fmt),
+                       "JPG（推荐）"))
+        img_fmt_menu = ctk.CTkOptionMenu(
+            dialog, values=list(img_fmt_map.keys()), variable=img_fmt_var,
+            width=240, height=32, corner_radius=8,
+            fg_color=self._pal["card2"], button_color=self._pal["accent"],
+            text_color=self._pal["text"])
+        img_fmt_menu.pack(anchor="w", padx=20)
 
         def save():
             try:
@@ -1257,6 +1279,8 @@ class MainWindow:
                     self.settings["default_quality"] = code
                     self._current_quality = code
                     break
+            self.settings["image_format"] = img_fmt_map.get(
+                img_fmt_var.get(), "jpg")
             save_settings(self.settings_path, self.settings)
             dialog.destroy()
 

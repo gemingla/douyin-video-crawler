@@ -76,6 +76,9 @@ def main():
     ap.add_argument("--quality", default="best",
                     choices=["best", "1080p", "720p", "540p", "360p"],
                     help="画质档位（默认 best=取最大可用）")
+    ap.add_argument("--image-format", default="jpg",
+                    choices=["jpg", "png", "webp", "keep"],
+                    help="图集图片保存格式（默认 jpg；keep=保持源格式）")
     ap.add_argument("--login-cookie", default=None,
                     help="Netscape 格式 Cookie 文件（导出 douyin.com 的"
                          "登录 Cookie，成功率最高）")
@@ -141,8 +144,9 @@ def main():
                     result, str(out_dir), name,
                     progress_cb=lambda d, t, s: None,
                     cancel_event=cancel,
+                    image_format=args.image_format,
                 )
-                print(f"\n[3/3] 完成：{len(files)} 张图片")
+                print(f"\n[3/3] 完成：{len(files)} 张图片（{args.image_format}）")
                 for f in files:
                     print(f"   {f}")
             else:

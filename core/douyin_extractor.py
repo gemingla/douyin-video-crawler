@@ -1236,19 +1236,87 @@ _IMAGE_EXT_BY_CTYPE = {
 }
 
 
+def _convert_image_bytes(data: bytes, target: str) -> bytes:
+    """用 Pillow 把图片字节转换为目标格式（jpg/png/webp）。target 未知时原样返回。
+
+    - jpg: 含透明通道时合成白底（避免透明变黑）
+    - png: 保留透明
+    - webp: quality 92
+    """
+    if not data or not target or target == "keep":
+        return data
+    import io as _io
+    from PIL import Image
+    try:
+        img = Image.open(_io.BytesIO(data))
+        out = _io.BytesIO()
+        fmt = target.lower()
+        if fmt in ("jpg", "jpeg", "jfif"):
+            img = img.convert("RGBA") if img.mode in ("RGBA", "LA") or (
+                img.mode == "P" and "transparency" in img.info) else img
+            if img.mode == "RGBA":
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[3])
+                img = bg
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(out, "JPEG", quality=92)
+            return out.getvalue()
+        if fmt == "png":
+            if img.mode == "P":
+                img = img.convert("RGBA")
+            elif img.mode not in ("RGB", "RGBA", "L"):
+                img = img.convert("RGBA")
+            img.save(out, "PNG")
+            return out.getvalue()
+        if fmt == "webp":
+            img.save(out, "WEBP", quality=92)
+            return out.getvalue()
+    except Exception:
+        return data  # 转换失败时保底用原始数据
+    return data
+
+
+_IMAGE_FORMAT_EXT = {
+    "jpg": ".jpg", "jpeg": ".jpg", "jfif": ".jpg",
+    "png": ".png", "webp": ".webp", "gif": ".gif",
+    "keep": "",
+}
+
+
+def _detect_image_ext(ctype: str, img_url: str) -> str:
+    ext = _IMAGE_EXT_BY_CTYPE.get(ctype.split(";")[0].strip().lower(), "")
+    if not ext:
+        m = re.search(r'\.(webp|jpg|jpeg|png|avif|heic|heif|gif)(\?|$)',
+                      img_url, re.I)
+        ext = {"jpeg": ".jpg"}.get(
+            (m.group(1) if m else "").lower(),
+            f".{(m.group(1) if m else 'jpg').lower()}")
+    return ext or ".jpg"
+
+
 def download_douyin_images(
     result: Dict[str, Any],
     output_dir: str,
     filename: str = "抖音图集",
     progress_cb: Optional[Callable] = None,
     cancel_event: Optional[threading.Event] = None,
+    image_format: str = "jpg",
 ) -> List[str]:
-    """下载图集（note/图文）图片。返回文件路径列表"""
+    """下载图集（note/图文）图片并按目标格式保存。返回文件路径列表。
+
+    Args:
+        image_format: 保存格式 jpg/png/webp/keep（keep=保持源格式）
+    """
     if _requests is None:
         raise DouyinError("缺少 requests 库")
     images = result.get("images") or []
     if not images:
         raise DouyinError("该作品不是图集")
+
+    fmt = (image_format or "jpg").lower().strip()
+    fmt = "jpg" if fmt in ("jpeg", "jfif") else fmt
+    out_ext = _IMAGE_FORMAT_EXT.get(fmt, ".jpg")
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -1280,24 +1348,32 @@ def download_douyin_images(
             resp = session.get(img_url, headers=headers, stream=True,
                                timeout=60, allow_redirects=True)
             resp.raise_for_status()
-            # 按 Content-Type / URL 后缀确定扩展名
-            ctype = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
-            ext = _IMAGE_EXT_BY_CTYPE.get(ctype, "")
-            if not ext:
-                m = re.search(r'\.(webp|jpg|jpeg|png|avif|heic|heif|gif)(\?|$)', img_url, re.I)
-                ext = {
-                    "jpeg": ".jpg",
-                }.get((m.group(1) if m else "").lower(),
-                      f".{(m.group(1) if m else 'jpg').lower()}")
-            if not ext:
-                ext = ".jpg"
+            # 目标扩展名：指定格式 → 该格式；keep → 按 Content-Type/URL 检测
+            if out_ext:
+                ext = out_ext
+            else:
+                ctype = (resp.headers.get("content-type") or "")
+                ext = _detect_image_ext(ctype, img_url)
             fpath = output_path / f"{safe_name}_{i:02d}{ext}"
+
+            # 读出源字节
+            from io import BytesIO
+            buf = BytesIO()
+            for chunk in resp.iter_content(chunk_size=64 * 1024):
+                if cancel_event and cancel_event.is_set():
+                    raise DouyinError("下载已取消")
+                if chunk:
+                    buf.write(chunk)
+            raw = buf.getvalue()
+            if out_ext:
+                data = _convert_image_bytes(raw, fmt)
+            else:
+                data = raw
+            if not data:
+                raise DouyinError("图片数据为空")
+
             with open(tmp_file, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=64 * 1024):
-                    if cancel_event and cancel_event.is_set():
-                        raise DouyinError("下载已取消")
-                    if chunk:
-                        f.write(chunk)
+                f.write(data)
             if tmp_file.exists() and tmp_file.stat().st_size > 0:
                 os.replace(tmp_file, fpath)
             if progress_cb:

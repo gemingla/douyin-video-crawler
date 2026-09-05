@@ -328,6 +328,7 @@ class DownloadManager:
                     filename=item.get("title", "抖音图集"),
                     progress_cb=on_progress,
                     cancel_event=self._cancel_event,
+                    image_format=item.get("_image_format") or "jpg",
                 )
                 if not saved:
                     raise DouyinError("图集图片下载失败")

@@ -14,7 +14,7 @@
 深/浅色主题、封面缩略图、下载队列）与命令行双入口。
 
 - 抖音 **视频**：自动选择最高可用画质直链下载
-- 抖音 **图集（图文笔记）**：自动识别，按 `标题_01.webp / _02.webp ...` 保存
+- 抖音 **图集（图文笔记）**：自动识别，下载后**按设置转换为 JPG/PNG/WEBP**（默认 JPG）
 - 抖音反爬适配：**页面 fetch hook 签名**方案，无需登录即可提取多数公开作品
 
 ---
@@ -75,6 +75,9 @@ python cli.py "https://v.douyin.com/xxxxxx/" --extract-only
 
 # 指定画质 / 输出目录 / 无浏览器窗口
 python cli.py "https://v.douyin.com/xxxxxx/" --quality 720p -o D:/download
+
+# 图集图片保存格式（jpg/png/webp/keep，默认 jpg 自动从 webp 转换）
+python cli.py "https://v.douyin.com/xxxxxx/" --image-format png
 
 # 需要登录态时：导入 Cookie 或连接已登录浏览器
 python cli.py "https://v.douyin.com/xxxxxx/" --login-cookie cookies.txt
@@ -143,8 +146,10 @@ CDN 对慢速客户端可能中途断流。下载器实现了：
 
 - 用 `_is_video_like_url` 过滤掉 mp3/m4a/音乐域名/静态图/封面，避免误当视频
 - 图集只保留 `images` 列表；GUI 显示"图集"标记，下载走图片分支
-- 图片 URL 无扩展名，**按响应头 `Content-Type` 自动识别**格式（多为 `image/webp`），
-  以 `.part` 临时文件写入后改名，失败自动清理
+- 图片 URL 无扩展名，**按响应头 `Content-Type` 自动识别**源格式（多为 `image/webp`）；
+  下载后**按用户设置转换**为 JPG/PNG/WEBP（GUI 设置 → 图集图片格式；
+  CLI `--image-format`；默认 JPG；`keep` 保持源格式）
+- 转换用 Pillow：JPG 时透明通道合成白底（避免透明变黑），高保真 quality=92
 
 ### 多路径提取链
 
